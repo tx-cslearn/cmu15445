@@ -50,7 +50,11 @@ class TrieNode {
    *
    * @param other_trie_node Old trie node.
    */
-  TrieNode(TrieNode &&other_trie_node) noexcept {}
+  TrieNode(TrieNode &&other_trie_node) noexcept {
+    this->key_char_ = other_trie_node.key_char_;
+    this->is_end_ = other_trie_node.is_end_;
+    this->children_ = std::move(other_trie_node.children_);  // unique_ptr不能拷贝，只能移动
+  }
 
   /**
    * @brief Destroy the TrieNode object.
@@ -214,7 +218,10 @@ class TrieNodeWithValue : public TrieNode {
    * @param trieNode TrieNode whose data is to be moved to TrieNodeWithValue
    * @param value
    */
-  TrieNodeWithValue(TrieNode &&trieNode, T value) {}
+  TrieNodeWithValue(TrieNode &&trieNode, T value) : TrieNode(std::forward<TrieNode>(trieNode)) {
+    this->value_ = value;
+    this->is_end_ = true;
+  }
 
   /**
    * TODO(P0): Add implementation
@@ -229,7 +236,11 @@ class TrieNodeWithValue : public TrieNode {
    * @param key_char Key char of this node
    * @param value Value of this node
    */
-  TrieNodeWithValue(char key_char, T value) {}
+  TrieNodeWithValue(char key_char, T value) {
+    this->value_ = value;
+    this->is_end_ = true;
+    this->key_char_ = key_char;
+  }
 
   /**
    * @brief Destroy the Trie Node With Value object
@@ -241,7 +252,7 @@ class TrieNodeWithValue : public TrieNode {
    *
    * @return Value of type T stored in this node
    */
-  T GetValue() const { return value_; }
+  auto GetValue() const -> T { return value_; }
 };
 
 /**
