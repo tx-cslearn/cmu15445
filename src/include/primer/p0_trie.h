@@ -12,7 +12,10 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cstddef>
 #include <memory>
+#include <queue>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -20,7 +23,7 @@
 #include <vector>
 
 #include "common/exception.h"
-#include "common/rwlatch.h"
+// #include "common/rwlatch.h"
 
 namespace bustub {
 
@@ -125,11 +128,12 @@ class TrieNode {
     if (child->key_char_ != key_char) {
       return nullptr;
     }
+
     bool ok = this->children_.insert({key_char, std::move(child)}).second;
     if (!ok) {
       return nullptr;
     }
-    return &child;
+    return &children_[key_char];
   }
 
   /**
@@ -264,7 +268,7 @@ class Trie {
   /* Root node of the trie */
   std::unique_ptr<TrieNode> root_;
   /* Read-write lock for the trie */
-  ReaderWriterLatch latch_;
+  // ReaderWriterLatch latch_;
 
  public:
   /**
@@ -273,7 +277,7 @@ class Trie {
    * @brief Construct a new Trie object. Initialize the root node with '\0'
    * character.
    */
-  Trie() = default;
+  Trie() { this->root_ = std::make_unique<TrieNode>('\0'); };
 
   /**
    * TODO(P0): Add implementation
@@ -302,8 +306,46 @@ class Trie {
    * @return True if insertion succeeds, false if the key already exists
    */
   template <typename T>
-  bool Insert(const std::string &key, T value) {
-    return false;
+  auto Insert(const std::string &key, T value) -> bool {
+    if (key.empty()) {
+      return false;
+    }
+    auto cur = &this->root_;
+    size_t i = 0;
+
+    while (i < key.size()) {
+      cur = (*cur)->GetChildNode(key[i]);
+      if (cur == nullptr) {
+        break;
+      }
+      i++;
+    }
+    if ((*cur)->IsEndNode()) {
+      return false;
+    }
+
+    cur = &this->root_;
+    i = 0;
+    while (i < key.size() - 1) {
+      if (!(*cur)->HasChild(key[i])) {
+        cur = (*cur)->InsertChildNode(key[i], std::make_unique<TrieNode>(key[i]));
+      } else {
+        cur = (*cur)->GetChildNode(key[i]);
+      }
+      i++;
+    }
+    if (!(*cur)->HasChild(key[i])) {
+      cur = (*cur)->InsertChildNode(key[i], std::make_unique<TrieNode>(key[i]));
+      (*cur) = std::make_unique<TrieNodeWithValue<T>>(std::move(*(*cur)), value);
+    } else {
+      cur = (*cur)->GetChildNode(key[i]);
+      if (!(*cur)->IsEndNode()) {
+        (*cur) = std::make_unique<TrieNodeWithValue<T>>(std::move(*(*cur)), value);
+      } else {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -323,7 +365,36 @@ class Trie {
    * @param key Key used to traverse the trie and find the correct node
    * @return True if the key exists and is removed, false otherwise
    */
-  bool Remove(const std::string &key) { return false; }
+  auto Remove(const std::string &key) -> bool {
+    if (key.empty()) {
+      return false;
+    }
+    std::vector<std::unique_ptr<TrieNode> *> vec;
+    auto cur = &this->root_;
+    size_t i = 0;
+    while (i < key.size() - 1) {
+      cur = (*cur)->GetChildNode(key[i]);
+      if (cur == nullptr) {
+        return false;
+      }
+      vec.emplace_back(cur);
+      i++;
+    }
+    auto end = (*cur)->GetChildNode(key[i]);
+    if ((*end)->IsEndNode()) {
+      (*end)->SetEndNode(false);
+      if (!(*end)->HasChildren()) {
+        (*cur)->RemoveChildNode(key[i]);
+      }
+    }
+
+    for (int i = vec.size() - 1; i >= 0; i--) {
+      if (!(*vec[i])->HasChildren() && !(*vec[i])->IsEndNode()) {
+        (*vec[i - 1])->RemoveChildNode((*vec[i])->GetKeyChar());
+      }
+    }
+    return true;
+  }
 
   /**
    * TODO(P0): Add implementation
@@ -344,9 +415,22 @@ class Trie {
    * @return Value of type T if type matches
    */
   template <typename T>
-  T GetValue(const std::string &key, bool *success) {
+  auto GetValue(const std::string &key, bool *success) -> T {
+    auto cur = &this->root_;
+    size_t i = 0;
+    while (i < key.size()) {
+      cur = (*cur)->GetChildNode(key[i]);
+      if (cur == nullptr) {
+        *success = false;
+        return T();
+      }
+    }
+    if ((*cur)->IsEndNode() && (*cur)->GetKeyChar() == key[i - 1]) {
+      *success = true;
+      return dynamic_cast<TrieNodeWithValue<T> *>(&(*(*cur)))->GetValue();
+    }
     *success = false;
-    return {};
+    return T();
   }
 };
 }  // namespace bustub
