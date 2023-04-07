@@ -256,7 +256,7 @@ class TrieNodeWithValue : public TrieNode {
    *
    * @return Value of type T stored in this node
    */
-  auto GetValue() const -> T { return value_; }
+  auto GetValue() const -> T { return this->value_; }
 };
 
 /**
@@ -311,40 +311,21 @@ class Trie {
       return false;
     }
     auto cur = &this->root_;
-    size_t i = 0;
+    std::unique_ptr<TrieNode> *parent;
+    ;
 
-    while (i < key.size()) {
-      cur = (*cur)->GetChildNode(key[i]);
-      if (cur == nullptr) {
-        break;
+    for (auto key_char : key) {
+      if (!cur->get()->HasChild(key_char)) {
+        cur->get()->InsertChildNode(key_char, std::make_unique<TrieNode>(key_char));
       }
-      i++;
+      parent = cur;
+      cur = cur->get()->GetChildNode(key_char);
     }
-    if ((*cur)->IsEndNode()) {
+    if (cur->get()->IsEndNode()) {
       return false;
     }
 
-    cur = &this->root_;
-    i = 0;
-    while (i < key.size() - 1) {
-      if (!(*cur)->HasChild(key[i])) {
-        cur = (*cur)->InsertChildNode(key[i], std::make_unique<TrieNode>(key[i]));
-      } else {
-        cur = (*cur)->GetChildNode(key[i]);
-      }
-      i++;
-    }
-    if (!(*cur)->HasChild(key[i])) {
-      cur = (*cur)->InsertChildNode(key[i], std::make_unique<TrieNode>(key[i]));
-      (*cur) = std::make_unique<TrieNodeWithValue<T>>(std::move(*(*cur)), value);
-    } else {
-      cur = (*cur)->GetChildNode(key[i]);
-      if (!(*cur)->IsEndNode()) {
-        (*cur) = std::make_unique<TrieNodeWithValue<T>>(std::move(*(*cur)), value);
-      } else {
-        return false;
-      }
-    }
+    (*cur) = std::make_unique<TrieNodeWithValue<T>>(std::move(*(*cur)), value);
     return true;
   }
 
@@ -417,17 +398,22 @@ class Trie {
   template <typename T>
   auto GetValue(const std::string &key, bool *success) -> T {
     auto cur = &this->root_;
-    size_t i = 0;
-    while (i < key.size()) {
-      cur = (*cur)->GetChildNode(key[i]);
-      if (cur == nullptr) {
+    if (key.empty()) {
+      *success = false;
+    }
+    for (auto key_char : key) {
+      if (cur->get()->HasChild(key_char)) {
+        cur = cur->get()->GetChildNode(key_char);
+      }
+    }
+    if ((*cur)->IsEndNode()) {
+      *success = true;
+      auto t = dynamic_cast<TrieNodeWithValue<T> *>(&(*(*cur)));
+      if (t == nullptr) {
         *success = false;
         return T();
       }
-    }
-    if ((*cur)->IsEndNode() && (*cur)->GetKeyChar() == key[i - 1]) {
-      *success = true;
-      return dynamic_cast<TrieNodeWithValue<T> *>(&(*(*cur)))->GetValue();
+      return t->GetValue();
     }
     *success = false;
     return T();
