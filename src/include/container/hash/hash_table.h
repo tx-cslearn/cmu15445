@@ -23,7 +23,7 @@ template <typename K, typename V>
 class HashTable {
  public:
   HashTable() = default;
-  virtual ~HashTable() = default;
+  virtual ~HashTable() = default;  //虚析构函数 父类指针析构子类对象
   // lookup and modifier
   virtual auto Find(const K &key, V &value) -> bool = 0;
   virtual auto Remove(const K &key) -> bool = 0;
