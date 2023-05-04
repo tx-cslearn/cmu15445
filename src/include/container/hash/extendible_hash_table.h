@@ -17,9 +17,11 @@
 
 #pragma once
 
+#include <iostream>
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
+#include <ostream>
 #include <utility>
 #include <vector>
 
@@ -123,6 +125,8 @@ class ExtendibleHashTable : public HashTable<K, V> {
     inline void IncrementDepth() { depth_++; }
 
     inline auto GetItems() -> std::list<std::pair<K, V>> & { return list_; }
+
+    inline void ClearItems() { list_.clear(); }
 
     /**
      *

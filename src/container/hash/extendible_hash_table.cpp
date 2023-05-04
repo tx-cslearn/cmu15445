@@ -16,11 +16,15 @@
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <iostream>
 #include <list>
 #include <memory>
+#include <mutex>
+#include <ostream>
 #include <utility>
 #include <vector>
 
+#include "binder/bound_table_ref.h"
 #include "container/hash/extendible_hash_table.h"
 #include "storage/page/page.h"
 
@@ -36,17 +40,6 @@ template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::IndexOf(const K &key) -> size_t {
   int mask = (1 << global_depth_) - 1;
   return std::hash<K>()(key) & mask;
-}
-
-template <typename K, typename V>
-auto ExtendibleHashTable<K, V>::RedistributeBucket(std::shared_ptr<Bucket> bucket) -> void {
-  Bucket *bu = bucket.get();
-  std::vector<std::pair<K, V>> vec;
-  for (auto it = bu->GetItems().begin(); it != bu->GetItems().end(); it++) {
-    vec.emplace_back((*it).first, (*it).second);
-  }
-  bu->GetItems().clear();
-  dir_.emplace_back(std::make_shared<Bucket>(bucket_size_));
 }
 
 template <typename K, typename V>
@@ -112,23 +105,55 @@ auto ExtendibleHashTable<K, V>::Remove(const K &key) -> bool {
 
 template <typename K, typename V>
 void ExtendibleHashTable<K, V>::Insert(const K &key, const V &value) {
-  size_t idx = IndexOf(key);
-  std::shared_ptr<Bucket> bu = dir_[idx];
-  Bucket *b = bu.get();
-  V val;
-  if (b->Find(key, val)) {
-    b->Insert(key, value);
-  } else {
-    if (b->IsFull()) {
+  //当要插入的桶满了时，如果桶的局部深度等于全局深度，则增加全局深度并将目录大小加倍。
+  //增加桶的局部深度
+  //拆分桶并重新分配目录指针和桶中的 kv 对。
+  std::lock_guard<std::mutex> guard(latch_);
+  while (dir_[IndexOf(key)]->IsFull()) {
+    int id = IndexOf(key);
+    auto target_bucket = dir_[id];
+    if (target_bucket->GetDepth() == GetGlobalDepthInternal()) {
       global_depth_++;
-      b->GetItems().resize(b->GetItems().size() * 2);
-      b->IncrementDepth();
-      RedistributeBucket(bu);
-    } else {
-      b->Insert(key, value);
+      size_t size = dir_.size();
+      dir_.resize(size << 1);
+      for (size_t i = 0; i < size; i++) {
+        dir_[i + size] = dir_[i];
+      }
+    }
+
+    int mask = 1 << target_bucket->GetDepth();
+    target_bucket->IncrementDepth();
+    auto one_bucket = std::make_shared<Bucket>(bucket_size_, target_bucket->GetDepth());
+    auto l = target_bucket->GetItems();
+    target_bucket->ClearItems();
+    for (const auto &item : l) {
+      size_t hashkey = std::hash<K>()(item.first);
+      if ((hashkey & mask) != 0U) {
+        one_bucket->Insert(item.first, item.second);
+      } else {
+        target_bucket->Insert(item.first, item.second);
+      }
+    }
+    num_buckets_++;
+    for (size_t i = 0; i < dir_.size(); i++) {
+      if (dir_[i] == target_bucket) {
+        if ((i & mask) != 0U) {
+          dir_[i] = one_bucket;
+        }
+      }
     }
   }
-  b = nullptr;
+  auto index = IndexOf(key);
+  auto target_bucket = dir_[index];
+
+  for (auto &item : target_bucket->GetItems()) {
+    if (item.first == key) {
+      item.second = value;
+      return;
+    }
+  }
+
+  target_bucket->Insert(key, value);
 }
 
 //===--------------------------------------------------------------------===//
