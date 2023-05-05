@@ -12,16 +12,30 @@
 
 #pragma once
 
+#include <chrono>
+#include <cstdint>
+#include <deque>
 #include <limits>
 #include <list>
+#include <memory>
 #include <mutex>  // NOLINT
+#include <ratio>
 #include <unordered_map>
 #include <vector>
 
 #include "common/config.h"
+#include "common/logger.h"
 #include "common/macros.h"
 
 namespace bustub {
+
+struct FrameInfo {
+  bool evictable_{false};
+  bool is_cached_{false};
+  std::vector<int64_t> time_;
+  FrameInfo() = default;
+  explicit FrameInfo(int64_t t) { time_.emplace_back(t); }
+};
 
 /**
  * LRUKReplacer implements the LRU-k replacement policy.
@@ -63,7 +77,7 @@ class LRUKReplacer {
    * A frame with less than k historical references is given +inf as its backward k-distance.
    * If multiple frames have inf backward k-distance, then evict the frame with the earliest
    * timestamp overall.
-   *
+   * 优先淘汰访问历史列表里的数据
    * Successful eviction of a frame should decrement the size of replacer and remove the frame's
    * access history.
    *
@@ -136,10 +150,13 @@ class LRUKReplacer {
   // TODO(student): implement me! You can replace these member variables as you like.
   // Remove maybe_unused if you start using them.
   [[maybe_unused]] size_t current_timestamp_{0};
-  [[maybe_unused]] size_t curr_size_{0};
-  [[maybe_unused]] size_t replacer_size_;
-  [[maybe_unused]] size_t k_;
+  size_t curr_size_{0};
+  size_t replacer_size_;
+  size_t k_;
   std::mutex latch_;
+  std::deque<frame_id_t> history_list_;
+  std::deque<frame_id_t> cache_list_;
+  std::unordered_map<frame_id_t, std::shared_ptr<FrameInfo>> all_;
 };
 
 }  // namespace bustub
