@@ -1,10 +1,15 @@
+#include <iostream>
+#include <ostream>
 #include <string>
 
+#include "buffer/buffer_pool_manager.h"
+#include "common/config.h"
 #include "common/exception.h"
 #include "common/logger.h"
 #include "common/rid.h"
 #include "storage/index/b_plus_tree.h"
 #include "storage/page/header_page.h"
+#include "storage/page/page.h"
 
 namespace bustub {
 INDEX_TEMPLATE_ARGUMENTS
@@ -15,13 +20,30 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, BufferPoolManager *buffer_pool_manag
       buffer_pool_manager_(buffer_pool_manager),
       comparator_(comparator),
       leaf_max_size_(leaf_max_size),
-      internal_max_size_(internal_max_size) {}
+      internal_max_size_(internal_max_size) {
+  LOG_INFO("leaf_max_size: %d", leaf_max_size);
+  LOG_INFO("intermal_max_size: %d", internal_max_size_);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::FindLeaf(const KeyType &key) -> Page * {
+  Page *page = buffer_pool_manager_->FetchPage(root_page_id_);
+  auto tree_page = reinterpret_cast<BPlusTreePage *>(page->GetData());
+
+  while (!tree_page->IsLeafPage()) {
+    auto interbal_page = reinterpret_cast<InternalPage *>(tree_page);
+    auto page_id = interbal_page->Lookup(key, comparator_);
+    page = buffer_pool_manager_->FetchPage(page_id);
+    tree_page = reinterpret_cast<BPlusTreePage *>(page->GetData());
+  }
+  return page;
+}
 
 /*
  * Helper function to decide whether current b+tree is empty
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return true; }
+auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return root_page_id_ == INVALID_PAGE_ID; }
 /*****************************************************************************
  * SEARCH
  *****************************************************************************/
@@ -32,7 +54,16 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return true; }
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *transaction) -> bool {
-  return false;
+  std::cout << "getvalue key:" << key << std::endl;
+  Page *page = FindLeaf(key);
+  auto leaf_page = reinterpret_cast<LeafPage *>(page->GetData());
+  ValueType value;
+  bool is_exist = leaf_page->Lookup(key, &value, comparator_);
+  buffer_pool_manager_->UnpinPage(leaf_page->GetPageId(), false);
+  if (is_exist) {
+    result->push_back(value);
+  }
+  return is_exist;
 }
 
 /*****************************************************************************

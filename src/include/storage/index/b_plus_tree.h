@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "common/logger.h"
 #include "concurrency/transaction.h"
 #include "storage/index/index_iterator.h"
 #include "storage/page/b_plus_tree_internal_page.h"
@@ -81,6 +82,8 @@ class BPlusTree {
   void ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::ofstream &out) const;
 
   void ToString(BPlusTreePage *page, BufferPoolManager *bpm) const;
+
+  auto FindLeaf(const KeyType &key) -> Page *;
 
   // member variable
   std::string index_name_;
